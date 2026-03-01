@@ -48,7 +48,9 @@ class MPPIController:
         self.hover_thrust = mass * gravity
 
         if noise_sigma is None:
-            noise_sigma = np.array([0.04, 0.08, 0.08])
+            # thrust noise: ±0.02N (≈7% hover), roll/pitch noise: ±0.03rad (≈1.7°)
+            # Smaller sigma → smoother control, fewer extreme samples
+            noise_sigma = np.array([0.02, 0.03, 0.03])
         self.noise_sigma = noise_sigma
 
         if Q is None:
@@ -139,10 +141,12 @@ class MPPIController:
             w /= w_sum
 
         self.U_nominal += np.sum(w[:, np.newaxis, np.newaxis] * noise, axis=0)
+        # Temporal smoothing: blend each step toward previous step
+        # alpha=0 → no smoothing; alpha→1 → fully follow previous step
         if self.smoothing_alpha > 0:
             for t in range(1, self.N):
-                self.U_nominal[t] = (self.smoothing_alpha * self.U_nominal[t-1]
-                                     + (1-self.smoothing_alpha) * self.U_nominal[t])
+                self.U_nominal[t] = ((1 - self.smoothing_alpha) * self.U_nominal[t]
+                                     + self.smoothing_alpha * self.U_nominal[t-1])
         self.U_nominal = np.clip(self.U_nominal, self.u_min, self.u_max)
 
         ctrl = self.U_nominal[0].copy()

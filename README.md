@@ -214,13 +214,6 @@ $$w_i = \frac{\exp(-S_i / \lambda)}{\sum_j \exp(-S_j / \lambda)}$$
 - `LemniscateTrajectory`: 八字形轨迹
 - `HelixTrajectory`: 螺旋上升轨迹
 
-## 🔗 参考资料
-
-- [MuJoCo](https://mujoco.org/) — 物理仿真引擎
-- [MuJoCo MPC](https://github.com/google-deepmind/mujoco_mpc) — Google DeepMind MPC 框架
-- [Crazyflie 2](https://github.com/google-deepmind/mujoco_menagerie) — 无人机 MJCF 模型
-- [CasADi](https://web.casadi.org/) — 非线性优化框架
-- Williams et al., *"Information Theoretic MPC for Model-Based Reinforcement Learning"*, ICRA 2017 — MPPI 原始论文
 
 ## 📝 License
 

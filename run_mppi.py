@@ -65,14 +65,17 @@ def main():
                                     center=(0.0, 0.0), height=args.height)
 
     # ---- Controllers -------------------------------------------------------
-    Q  = np.diag([200., 200., 300., 0.5, 0.5, 0.5])
-    Qf = np.diag([500., 500., 600., 5., 5., 5.])
-    R  = np.diag([0.5, 5.0, 5.0])
+    # Q: [x, y, z, vx, vy, vz]  — increase vz (was 0.5) to dampen Z oscillation
+    Q  = np.diag([200., 200., 300., 0.5, 0.5, 5.0])
+    Qf = np.diag([500., 500., 600., 5.,  5.,  20.])
+    # R: [thrust, roll, pitch]  — increase attitude penalty to reduce control noise
+    R  = np.diag([1.0, 20.0, 20.0])
     outer = MPPIController(dt=dt_ctrl, horizon=args.horizon,
                            n_samples=args.n_samples,
                            temperature=args.temperature,
                            mass=env.MASS, gravity=9.81,
-                           Q=Q, R=R, Q_terminal=Qf, max_tilt_deg=10.0)
+                           Q=Q, R=R, Q_terminal=Qf, max_tilt_deg=10.0,
+                           smoothing_alpha=0.5)
     inner = CascadeController(dt_inner=dt_sim)
 
     # ---- Initialise --------------------------------------------------------
