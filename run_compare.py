@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-Compare MPC and MPPI controllers on the same trajectory tracking task.
-
-Runs both controllers sequentially on the same circle trajectory and
-produces a side-by-side comparison plot.
+Compare MPC and MPPI controllers on the same trajectory (cascade control).
 
 Usage:
     python run_compare.py [--radius 1.0] [--duration 20] [--save comparison.png]
@@ -13,74 +10,73 @@ import argparse
 import time
 import numpy as np
 
-from drone_mpc.drone_env import DroneEnv
+from drone_mpc.drone_env import DroneEnv, quat_to_euler
 from drone_mpc.mpc_controller import MPCController
 from drone_mpc.mppi_controller import MPPIController
+from drone_mpc.inner_loop import CascadeController
 from drone_mpc.trajectory import CircleTrajectory, LemniscateTrajectory
 from drone_mpc.visualization import compare_controllers, plot_tracking_results
 
 
-def run_controller(env, controller, traj, duration, dt_ctrl, dt_sim, name="Controller"):
-    """Run a controller and collect results."""
-    ref0 = traj.get_reference(0.0)
+def run_controller(env, outer, traj, duration, dt_ctrl, dt_sim, name="Controller"):
+    """Run a cascade (outer + inner) controller and collect results."""
+    inner = CascadeController(dt_inner=dt_sim)
+    sim_steps_per_ctrl = max(1, round(dt_ctrl / dt_sim))
+
+    ref0  = traj.get_reference(0.0)
     state = env.reset(pos=ref0[:3])
+    inner.reset()
+    if hasattr(outer, 'reset'):
+        outer.reset()
 
-    n_ctrl_steps = int(duration / dt_ctrl)
-    sim_steps_per_ctrl = max(1, int(dt_ctrl / dt_sim))
+    log_times, log_pos, log_ref, log_ctrl, log_compute = [], [], [], [], []
 
-    log_times = []
-    log_pos = []
-    log_ref = []
-    log_ctrl = []
-    log_compute_time = []
+    outer_cmd     = np.array([env.HOVER_THRUST, 0.0, 0.0, 0.0])
+    n_steps       = int(duration / dt_sim)
+    outer_counter = 0
 
-    print(f"\n  Running {name}...")
+    print(f"\n  Running {name} …")
 
-    for step in range(n_ctrl_steps):
-        t_sim = step * dt_ctrl
-        ref_seq = traj.get_reference_sequence(t_sim, controller.N, controller.dt)
+    for step in range(n_steps):
+        t_sim = step * dt_sim
 
-        t_start = time.time()
-        ctrl = controller.compute_control(state, ref_seq)
-        t_compute = time.time() - t_start
+        if outer_counter == 0:
+            ref_seq = traj.get_reference_sequence(t_sim, outer.N, outer.dt)
+            t0 = time.time()
+            outer_cmd = outer.compute_control(state, ref_seq)
+            t_solve   = time.time() - t0
 
-        for _ in range(sim_steps_per_ctrl):
-            state = env.step(ctrl)
+            ref_now = traj.get_reference(t_sim)
+            pos     = state[:3]
+            log_times.append(t_sim)
+            log_pos.append(pos.copy())
+            log_ref.append(ref_now[:3].copy())
+            log_ctrl.append(outer_cmd.copy())
+            log_compute.append(t_solve)
 
-        ref_now = traj.get_reference(t_sim)
-        pos = state[:3]
+            if step % (100 * sim_steps_per_ctrl) == 0:
+                err = np.linalg.norm(pos - ref_now[:3])
+                print(f"    t={t_sim:6.2f}s  err={err:.4f}m  solve={t_solve*1e3:.1f}ms")
 
-        log_times.append(t_sim)
-        log_pos.append(pos.copy())
-        log_ref.append(ref_now[:3].copy())
-        log_ctrl.append(ctrl.copy())
-        log_compute_time.append(t_compute)
+        outer_counter = (outer_counter + 1) % sim_steps_per_ctrl
 
-        if step % 100 == 0:
-            error = np.linalg.norm(pos - ref_now[:3])
-            print(f"    t={t_sim:6.2f}s | error={error:.4f}m | compute={t_compute*1000:.1f}ms")
+        euler = quat_to_euler(state[3:7])
+        ctrl  = inner.step(outer_cmd, euler, state[2], state[9])
+        state = env.step(ctrl)
 
-    times = np.array(log_times)
+    times      = np.array(log_times)
     actual_pos = np.array(log_pos)
-    ref_pos = np.array(log_ref)
-    controls = np.array(log_ctrl)
-    compute_times = np.array(log_compute_time)
+    ref_pos    = np.array(log_ref)
+    controls   = np.array(log_ctrl)
+    comp_times = np.array(log_compute)
 
     errors = np.linalg.norm(actual_pos - ref_pos, axis=1)
-    rmse = np.sqrt(np.mean(errors ** 2))
-    max_error = np.max(errors)
-    avg_compute = np.mean(compute_times) * 1000
+    rmse   = np.sqrt(np.mean(errors ** 2))
+    print(f"    {name}: RMSE={rmse:.4f}m  Max={np.max(errors):.4f}m"
+          f"  AvgSolve={np.mean(comp_times)*1e3:.1f}ms")
 
-    print(f"    {name} Results: RMSE={rmse:.4f}m, Max={max_error:.4f}m, "
-          f"Avg compute={avg_compute:.1f}ms")
-
-    return {
-        "times": times,
-        "actual_pos": actual_pos,
-        "ref_pos": ref_pos,
-        "controls": controls,
-        "compute_times": compute_times,
-    }
+    return dict(times=times, actual_pos=actual_pos, ref_pos=ref_pos,
+                controls=controls, compute_times=comp_times)
 
 
 def main():

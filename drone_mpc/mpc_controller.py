@@ -84,17 +84,18 @@ class MPCController:
         self.R = R
         self.Q_terminal = Q_terminal
 
-        # Control bounds
-        self.u_min = np.array([0.0, -max_moment, -max_moment, -max_moment])
-        self.u_max = np.array([max_thrust, max_moment, max_moment, max_moment])
+        # Control bounds: [thrust_N, roll_rad, pitch_rad, yaw_rate_rads]
+        max_angle = np.deg2rad(30.0)          # ±30° roll/pitch
+        max_yaw_rate = np.deg2rad(180.0)      # ±180°/s yaw rate
+        self.u_min = np.array([0.0,        -max_angle,  -max_angle,  -max_yaw_rate])
+        self.u_max = np.array([max_thrust,  max_angle,   max_angle,   max_yaw_rate])
 
-        # Hover control (equilibrium)
+        # Hover equilibrium command
         self.u_hover = np.array([mass * gravity, 0.0, 0.0, 0.0])
 
-        # Attitude response time constants
-        self.tau_roll = 0.05
+        # Attitude bandwidth (inner PID approx): ~20 Hz → τ ≈ 0.05 s
+        self.tau_roll  = 0.05
         self.tau_pitch = 0.05
-        self.tau_yaw = 0.1
 
         self.verbose = verbose
 
@@ -106,28 +107,25 @@ class MPCController:
 
     def _dynamics(self, x: ca.SX, u: ca.SX) -> ca.SX:
         """
-        Simplified quadrotor dynamics for MPC.
+        Simplified quadrotor dynamics for MPC prediction model.
 
-        State: [x, y, z, vx, vy, vz, roll, pitch, yaw]
-        Control: [thrust, roll_cmd, pitch_cmd, yaw_cmd]
+        State:   [x, y, z, vx, vy, vz, roll, pitch, yaw]
+        Control: [thrust_N, roll_cmd_rad, pitch_cmd_rad, yaw_rate_cmd_rads]
 
-        Uses small-angle linearization for attitude dynamics:
-            roll/pitch are treated as inputs that tilt the thrust vector.
+        Attitude is modelled as a first-order system driven by the inner-loop
+        PID (bandwidth ≈ 1/tau).  Yaw is integrated from yaw_rate command.
         """
         # Unpack state
-        px, py, pz = x[0], x[1], x[2]
         vx, vy, vz = x[3], x[4], x[5]
         roll, pitch, yaw = x[6], x[7], x[8]
 
         # Unpack control
-        thrust = u[0]
-        roll_cmd = u[1]
-        pitch_cmd = u[2]
-        yaw_cmd = u[3]
+        thrust    = u[0]          # [N]
+        roll_cmd  = u[1]          # [rad]
+        pitch_cmd = u[2]          # [rad]
+        yaw_rate  = u[3]          # [rad/s]
 
-        # Thrust direction (body z-axis in world frame, small-angle approx)
-        # Full rotation: R = Rz(yaw) @ Ry(pitch) @ Rx(roll)
-        # Simplified for small roll/pitch angles:
+        # Thrust direction in world frame (ZYX Euler, small-angle safe)
         ax = (thrust / self.mass) * (
             ca.cos(yaw) * ca.sin(pitch) + ca.sin(yaw) * ca.sin(roll)
         )
@@ -136,21 +134,18 @@ class MPCController:
         )
         az = (thrust / self.mass) * ca.cos(roll) * ca.cos(pitch) - self.gravity
 
-        # Position dynamics
-        dx = vx
-        dy = vy
-        dz = vz
+        # Translational dynamics
+        dx   = vx
+        dy   = vy
+        dz   = vz
+        dvx  = ax
+        dvy  = ay
+        dvz  = az
 
-        # Velocity dynamics
-        dvx = ax
-        dvy = ay
-        dvz = az
-
-        # Attitude dynamics (first-order response to commands)
-        # Roll/pitch moments map to desired angles via time constant
-        droll = (roll_cmd - roll) / self.tau_roll
+        # Attitude dynamics — first-order tracking of commanded angles
+        droll  = (roll_cmd  - roll)  / self.tau_roll
         dpitch = (pitch_cmd - pitch) / self.tau_pitch
-        dyaw = (yaw_cmd - yaw) / self.tau_yaw
+        dyaw   = yaw_rate               # directly integrate rate command
 
         return ca.vertcat(dx, dy, dz, dvx, dvy, dvz, droll, dpitch, dyaw)
 
@@ -361,22 +356,22 @@ class MPCController:
 
     def _mpc_to_actuator_ctrl(self, u_mpc: np.ndarray) -> np.ndarray:
         """
-        Map MPC output to actuator commands.
+        Map MPC internal control to the outer-loop command consumed by AttitudePID.
 
-        MPC output: [thrust, roll_cmd, pitch_cmd, yaw_cmd]
-        Actuator:   [body_thrust, x_moment, y_moment, z_moment]
+        MPC internal: [thrust_N, roll_cmd_rad, pitch_cmd_rad, yaw_rate_cmd_rads]
+        Outer cmd:    same format — passed directly to CascadeController.inner.compute()
 
-        The thrust is direct. Roll/pitch/yaw commands are mapped through
-        a simple proportional controller to moment commands.
+        NOTE: this does NOT write to MuJoCo ctrl[].
+              The run_*.py scripts feed this into AttitudePID which produces
+              the final [body_thrust, x_moment, y_moment, z_moment].
         """
-        thrust = u_mpc[0]
-        roll_cmd = u_mpc[1]
-        pitch_cmd = u_mpc[2]
-        yaw_cmd = u_mpc[3]
-
-        # Direct mapping: MPC already outputs appropriate control signals
-        ctrl = np.array([thrust, roll_cmd, pitch_cmd, yaw_cmd])
-        return ctrl
+        # Clamp roll/pitch to safe range (±30°)
+        max_angle = np.deg2rad(30.0)
+        thrust  = float(np.clip(u_mpc[0], 0.0, 0.35))
+        roll    = float(np.clip(u_mpc[1], -max_angle, max_angle))
+        pitch   = float(np.clip(u_mpc[2], -max_angle, max_angle))
+        yaw_rate = float(np.clip(u_mpc[3], -np.pi, np.pi))
+        return np.array([thrust, roll, pitch, yaw_rate])
 
     def reset(self):
         """Reset warm-start state."""

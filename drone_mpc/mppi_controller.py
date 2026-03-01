@@ -100,15 +100,16 @@ class MPPIController:
         self.R = R
         self.Q_terminal = Q_terminal
 
-        # Control bounds
-        self.u_min = np.array([0.0, -max_moment, -max_moment, -max_moment])
-        self.u_max = np.array([max_thrust, max_moment, max_moment, max_moment])
+        # Control: [thrust_N, roll_rad, pitch_rad, yaw_rate_rads]
+        max_angle    = np.deg2rad(30.0)
+        max_yaw_rate = np.deg2rad(180.0)
+        self.u_min   = np.array([0.0,        -max_angle,  -max_angle,  -max_yaw_rate])
+        self.u_max   = np.array([max_thrust,  max_angle,   max_angle,   max_yaw_rate])
         self.u_hover = np.array([mass * gravity, 0.0, 0.0, 0.0])
 
-        # Attitude time constants (same as MPC)
-        self.tau_roll = 0.05
+        # Attitude bandwidth time constants
+        self.tau_roll  = 0.05
         self.tau_pitch = 0.05
-        self.tau_yaw = 0.1
 
         # Nominal control sequence: (N, 4), initialized to hover
         self.U_nominal = np.tile(self.u_hover, (self.N, 1))
@@ -158,10 +159,10 @@ class MPPIController:
         vx, vy, vz = x[:, 3], x[:, 4], x[:, 5]
         roll, pitch, yaw = x[:, 6], x[:, 7], x[:, 8]
 
-        thrust = u[:, 0]
-        roll_cmd = u[:, 1]
-        pitch_cmd = u[:, 2]
-        yaw_cmd = u[:, 3]
+        thrust    = u[:, 0]   # [N]
+        roll_cmd  = u[:, 1]   # [rad]
+        pitch_cmd = u[:, 2]   # [rad]
+        yaw_rate  = u[:, 3]   # [rad/s]
 
         # Acceleration from thrust (body-frame to world-frame)
         ax = (thrust / self.mass) * (
@@ -172,10 +173,10 @@ class MPPIController:
         )
         az = (thrust / self.mass) * np.cos(roll) * np.cos(pitch) - self.gravity
 
-        # Attitude dynamics (first order)
-        droll = (roll_cmd - roll) / self.tau_roll
+        # Attitude dynamics: roll/pitch first-order tracking; yaw = integrate rate
+        droll  = (roll_cmd  - roll)  / self.tau_roll
         dpitch = (pitch_cmd - pitch) / self.tau_pitch
-        dyaw = (yaw_cmd - yaw) / self.tau_yaw
+        dyaw   = yaw_rate
 
         dx = np.column_stack([vx, vy, vz, ax, ay, az, droll, dpitch, dyaw])
 
