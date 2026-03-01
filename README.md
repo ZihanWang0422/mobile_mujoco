@@ -1,4 +1,4 @@
-# 🚁 Mobile MuJoCo — Drone MPC / MPPI Trajectory Tracking
+# 🚁 Mobile MuJoCo
 
 Quadrotor (Crazyflie 2) trajectory tracking in MuJoCo physics simulation, implementing two Model Predictive Control approaches: **MPC** (CasADi nonlinear optimization) and **MPPI** (sampling-based Path Integral control).
 
@@ -7,13 +7,7 @@ Quadrotor (Crazyflie 2) trajectory tracking in MuJoCo physics simulation, implem
 ## ✨ Features
 
 - 🎯 **Dual MPC backends** — gradient-based IPOPT solver (MPC) and gradient-free sampling (MPPI)
-- 🔄 **Cascade control architecture** — outer loop (50 Hz) for trajectory planning + inner AttitudePD loop (200 Hz)
-- 🛤️ **Multiple trajectories** — circle, figure-8 (lemniscate), helix, with smooth warm-up ramp
-- 🌀 **Spinning propeller animation** — visual-only prop rotation driven kinematically in MuJoCo
-- 📷 **Camera tracking** — viewer follows the drone from above-side angle
-- 🔴 **Flight trail visualization** — red line traces the drone's path in real time
-- 📊 **Rich plotting** — 3D trajectory, per-axis tracking, error RMSE, control inputs
-- ⚡ **Fast solves** — MPC ~2–5 ms, MPPI ~3–5 ms per outer-loop step
+
 
 ---
 
@@ -52,18 +46,8 @@ conda activate mobile_mujoco
 
 **2. Install dependencies**
 ```bash
-pip install mujoco numpy scipy matplotlib casadi
-```
-
-Or use the provided environment file:
-```bash
 conda env create -f environment.yml
 conda activate mobile_mujoco
-```
-
-**3. Verify**
-```bash
-python -c "import mujoco; import casadi; print('MuJoCo:', mujoco.__version__); print('All OK')"
 ```
 
 ---
@@ -130,26 +114,10 @@ python run_compare.py --save results/comparison.png
 
 ---
 
-## 📝 License
 
-MIT License
-  - 支持 warm start（利用上一步解初始化）
-  - 9D 简化状态 + RK4 动力学
+## 📝 TODO
 
-### `drone_mpc/mppi_controller.py` — MPPI 控制器
-
-- `MPPIController`: 采样路径积分控制
-  - `compute_control(state, reference)`: MPPI 采样优化
-  - 批量向量化前向仿真
-  - 自适应控制序列平滑
-
-### `drone_mpc/trajectory.py` — 轨迹生成
-
-- `CircleTrajectory`: 水平圆形轨迹
-- `LemniscateTrajectory`: 八字形轨迹
-- `HelixTrajectory`: 螺旋上升轨迹
+- ✅ Add warmup and smoothing fixes for MPC/MPPI startup
+- 🔧 Improve MPPI performance by optionally integrating JAX (vectorized sampling / GPU)
 
 
-## 📝 License
-
-MIT License
