@@ -99,6 +99,7 @@ class LemniscateTrajectory(TrajectoryBase):
         omega: float = 0.4,
         center: Tuple[float, float] = (0.0, 0.0),
         height: float = 1.0,
+        warmup_t: float = 0.0,
     ):
         """
         Args:
@@ -106,17 +107,46 @@ class LemniscateTrajectory(TrajectoryBase):
             omega: Angular speed in rad/s
             center: (cx, cy) center of the figure-8
             height: Flying altitude in meters
+            warmup_t: Soft-start duration (s). During [0, warmup_t] the
+                      reference velocity is ramped from 0 to full speed
+                      while position is held at t=0 start point, so the
+                      drone accelerates gently before entering the loop.
         """
         self.scale = scale
         self.omega = omega
         self.center = center
         self.height = height
+        self.warmup_t = warmup_t
 
     def get_reference(self, t: float) -> np.ndarray:
         cx, cy = self.center
         a = self.scale
         w = self.omega
-        theta = w * t
+
+        if self.warmup_t > 0 and t < self.warmup_t:
+            # Warmup phase: stay at the figure-8 entry point (theta=0),
+            # ramp reference velocity from 0 to full using ease-in
+            alpha = t / self.warmup_t        # 0 → 1
+            ramp  = alpha * alpha            # quadratic ease-in
+
+            theta0 = 0.0
+            denom0 = 1.0 + np.sin(theta0) ** 2
+            x = cx + a * np.cos(theta0) / denom0
+            y = cy + a * np.sin(theta0) * np.cos(theta0) / denom0
+            z = self.height
+
+            # Full-speed velocity at theta=0 (for reference scaling)
+            dt_num = 1e-4
+            theta1 = w * dt_num
+            denom1 = 1.0 + np.sin(theta1) ** 2
+            x1 = cx + a * np.cos(theta1) / denom1
+            y1 = cy + a * np.sin(theta1) * np.cos(theta1) / denom1
+            full_vx = (x1 - x) / dt_num
+            full_vy = (y1 - y) / dt_num
+            return np.array([x, y, z, full_vx * ramp, full_vy * ramp, 0.0])
+
+        # Normal lemniscate (time shifted by warmup_t so theta=0 at t=warmup_t)
+        theta = w * (t - self.warmup_t)
 
         # Lemniscate parametric equations
         denom = 1.0 + np.sin(theta) ** 2
@@ -126,7 +156,7 @@ class LemniscateTrajectory(TrajectoryBase):
 
         # Numerical velocity approximation
         dt_num = 1e-4
-        theta2 = w * (t + dt_num)
+        theta2 = theta + w * dt_num
         denom2 = 1.0 + np.sin(theta2) ** 2
         x2 = cx + a * np.cos(theta2) / denom2
         y2 = cy + a * np.sin(theta2) * np.cos(theta2) / denom2

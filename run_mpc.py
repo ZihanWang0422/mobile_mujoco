@@ -59,15 +59,19 @@ def main():
                                 center=(0.0, 0.0), height=args.height)
     else:
         traj = LemniscateTrajectory(scale=args.radius, omega=args.omega,
-                                    center=(0.0, 0.0), height=args.height)
+                                    center=(0.0, 0.0), height=args.height,
+                                    warmup_t=3.0)
 
     # ---- Controllers -------------------------------------------------------
-    Q  = np.diag([200., 200., 300., 0.5, 0.5, 0.5])
-    Qf = np.diag([500., 500., 600., 5., 5., 5.])
+    # Increase vz weight to damp altitude oscillations; add S_delta for smooth transients
+    Q  = np.diag([200., 200., 300., 0.5, 0.5, 5.0])
+    Qf = np.diag([500., 500., 600., 5.,  5.,  20.])
     R  = np.diag([0.5, 5.0, 5.0])
+    S_delta = np.diag([2.0, 80.0, 80.0])   # control rate penalty (smooth thrust/tilt)
     outer = MPCController(dt=dt_ctrl, horizon=args.horizon,
                           mass=env.MASS, gravity=9.81,
-                          Q=Q, R=R, Q_terminal=Qf, max_tilt_deg=10.0)
+                          Q=Q, R=R, Q_terminal=Qf, S_delta=S_delta,
+                          max_tilt_deg=10.0)
     inner = CascadeController(dt_inner=dt_sim)
 
     # ---- Initialise --------------------------------------------------------

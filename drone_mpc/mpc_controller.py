@@ -25,6 +25,7 @@ class MPCController:
         Q: Optional[np.ndarray] = None,
         R: Optional[np.ndarray] = None,
         Q_terminal: Optional[np.ndarray] = None,
+        S_delta: Optional[np.ndarray] = None,
         mass: float = 0.027,
         gravity: float = 9.81,
         max_thrust: float = 0.35,
@@ -46,10 +47,14 @@ class MPCController:
             R = np.diag([0.5, 5.0, 5.0])
         if Q_terminal is None:
             Q_terminal = Q * 5.0
+        # S_delta: penalty on control rate of change Δu (smooths thrust/tilt transients)
+        if S_delta is None:
+            S_delta = np.diag([2.0, 50.0, 50.0])
 
         self.Q  = Q
         self.R  = R
         self.Qf = Q_terminal
+        self.S_delta = S_delta
 
         max_tilt = np.deg2rad(max_tilt_deg)
         self.u_min   = np.array([0.0,        -max_tilt, -max_tilt])
@@ -71,11 +76,13 @@ class MPCController:
         nx, nu, N = self.n_state, self.n_ctrl, self.N
         X = ca.SX.sym("X", nx, N + 1)
         U = ca.SX.sym("U", nu, N)
-        P = ca.SX.sym("P", nx + N * nx)
+        # P layout: [x0(nx) | refs(N*nx) | u_prev(nu)]
+        P = ca.SX.sym("P", nx + N * nx + nu)
 
         Q  = ca.DM(self.Q)
         R  = ca.DM(self.R)
         Qf = ca.DM(self.Qf)
+        S  = ca.DM(self.S_delta)
         uh = ca.DM(self.u_hover)
 
         cost = ca.SX(0.0)
@@ -83,10 +90,14 @@ class MPCController:
 
         g   += [X[:, 0] - P[:nx]];  lbg += [0.]*nx;  ubg += [0.]*nx
 
+        u_prev = P[nx + N*nx : nx + N*nx + nu]   # last applied control
         for k in range(N):
             x_ref = P[nx + k*nx : nx + (k+1)*nx]
             cost += ca.mtimes([(X[:,k]-x_ref).T,  Q,  X[:,k]-x_ref])
             cost += ca.mtimes([(U[:,k]-uh).T,      R,  U[:,k]-uh])
+            # control rate-of-change penalty
+            du = U[:,k] - (U[:,k-1] if k > 0 else u_prev)
+            cost += ca.mtimes([du.T, S, du])
             xk, uk = X[:,k], U[:,k]
             f1 = self._dynamics(xk, uk)
             f2 = self._dynamics(xk + self.dt/2*f1, uk)
@@ -132,7 +143,9 @@ class MPCController:
         ref6  = np.zeros((self.N, 6))
         cols  = min(6, reference.shape[1])
         ref6[:, :cols] = reference[:, :cols]
-        p = np.concatenate([x_mpc, ref6.flatten()])
+        # u_prev: last step's first control (or hover if cold start)
+        u_prev = self._prev_u[0] if self._prev_u is not None else self.u_hover
+        p = np.concatenate([x_mpc, ref6.flatten(), u_prev])
 
         n_vars = self._n_vars
         x0 = np.zeros(n_vars)
