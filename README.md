@@ -2,11 +2,17 @@
 
 Quadrotor (Crazyflie 2) trajectory tracking in MuJoCo physics simulation, implementing two Model Predictive Control approaches: **MPC** (CasADi nonlinear optimization) and **MPPI** (sampling-based Path Integral control).
 
----
+<p align="center">
+  <img src="media/mpc_circle.gif" width="48%" alt="MPC Circle Tracking"/>
+  &nbsp;
+  <img src="media/mpc_eight.gif" width="48%" alt="MPC Figure-8 Tracking"/>
+</p>
+
+<!-- ---
 
 ## ✨ Features
 
-- 🎯 **Dual MPC backends** — gradient-based IPOPT solver (MPC) and gradient-free sampling (MPPI)
+- 🎯 **Dual MPC backends** — gradient-based IPOPT solver (MPC) and gradient-free sampling (MPPI) -->
 
 
 ---
@@ -117,7 +123,8 @@ python run_compare.py --save results/comparison.png
 
 ## 📝 TODO
 
-- ✅ Add warmup and smoothing fixes for MPC/MPPI startup
-- 🔧 Improve MPPI performance by optionally integrating JAX (vectorized sampling / GPU)
+- [ ] Add warmup and smoothing fixes for MPC/MPPI startup.
+- [ ] Improve MPPI performance by optionally integrating JAX (vectorized sampling / GPU).
+- [ ] Add f1tenth env.
 
 
