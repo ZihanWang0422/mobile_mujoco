@@ -29,9 +29,7 @@ ENV/
 
 # Results & outputs
 results/
-*.png
 *.mp4
-*.gif
 logs/
 
 # IDE
