@@ -1,0 +1,15 @@
+name: mobile_mujoco
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - scipy
+  - matplotlib
+  - pip:
+    - mujoco>=3.0.0
+    - mujoco-python-viewer
+    - casadi
+    - mediapy

@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Conda
+.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Results & outputs
+results/
+*.png
+*.mp4
+*.gif
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+.history/
+
+# MuJoCo compiled files
+*.mjb
+
+# CMake build artifacts
+mujoco_mpc/build/
+mujoco_mpc/_deps/
+
+# Large binary / mesh files (keep models tracked but ignore any auto-generated)
+*.stl.bak
+*.obj.bak
