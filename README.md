@@ -2,11 +2,9 @@
 
 Quadrotor (Crazyflie 2) trajectory tracking in MuJoCo physics simulation, implementing two Model Predictive Control approaches: **MPC** (CasADi nonlinear optimization) and **MPPI** (sampling-based Path Integral control).
 
-<p align="center">
-  <img src="media/mpc_circle.gif" width="48%" alt="MPC Circle Tracking"/>
-  &nbsp;
-  <img src="media/mpc_eight.gif" width="48%" alt="MPC Figure-8 Tracking"/>
-</p>
+| MPC — Circle | MPC — Figure-8 |
+|:---:|:---:|
+| ![MPC Circle](media/mpc_circle.gif) | ![MPC Figure-8](media/mpc_eight.gif) |
 
 <!-- ---
 
