@@ -1,4 +1,4 @@
-# 🚁 Mobile MuJoCo
+# 🚁 mudrone
 
 Quadrotor (Crazyflie 2) trajectory tracking in MuJoCo physics simulation, implementing two Model Predictive Control approaches: **MPC** (CasADi nonlinear optimization) and **MPPI** (sampling-based Path Integral control).
 
